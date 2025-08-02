@@ -6,9 +6,9 @@ import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:uuid/uuid.dart';
-import 'package:blinkid_flutter/blinkid_flutter.dart';
 import 'dart:io';
-import '../config/config.dart';
+import '../providers/document_scanner_provider.dart';
+import '../providers/citation_provider.dart';
 
 class CitationChatScreen extends ConsumerStatefulWidget {
   const CitationChatScreen({super.key});
@@ -82,36 +82,52 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
       context: context,
       builder: (BuildContext context) => SafeArea(
         child: SizedBox(
-          height: 192,
+          height: 240,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              TextButton(
+              TextButton.icon(
+                icon: const Icon(Icons.badge),
                 onPressed: () {
                   Navigator.pop(context);
-                  _handleDriverLicenseScan();
+                  ref
+                      .read(documentScannerProvider.notifier)
+                      .scanDriverLicense();
                 },
-                child: const Align(
+                label: const Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Text('Scan Driver License'),
                 ),
               ),
-              TextButton(
+              TextButton.icon(
+                icon: const Icon(Icons.directions_car),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _handleVehicleRegistrationScan();
+                },
+                label: const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text('Scan Vehicle Registration'),
+                ),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.photo),
                 onPressed: () {
                   Navigator.pop(context);
                   _handleImageSelection();
                 },
-                child: const Align(
+                label: const Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Text('Photo Gallery'),
                 ),
               ),
-              TextButton(
+              TextButton.icon(
+                icon: const Icon(Icons.mic),
                 onPressed: () {
                   Navigator.pop(context);
                   _handleVoiceInput();
                 },
-                child: const Align(
+                label: const Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Text('Voice Input'),
                 ),
@@ -167,35 +183,22 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
         _messages.insert(0, imageMessage);
       });
 
-      // TODO: Process image with OCR
+      // Process image with OCR
       _processImage(File(result.path));
     }
   }
 
-  void _handleCameraCapture() async {
+  void _handleVehicleRegistrationScan() async {
     final result = await ImagePicker().pickImage(
       source: ImageSource.camera,
-      imageQuality: 70,
-      maxWidth: 1440,
+      imageQuality: 90,
+      maxWidth: 2048,
     );
 
     if (result != null) {
-      final bytes = await result.readAsBytes();
-      final imageMessage = types.ImageMessage(
-        author: _officer,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: const Uuid().v4(),
-        name: 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        size: bytes.length,
-        uri: result.path,
-      );
-
-      setState(() {
-        _messages.insert(0, imageMessage);
-      });
-
-      // TODO: Process image with OCR
-      _processImage(File(result.path));
+      ref
+          .read(documentScannerProvider.notifier)
+          .scanVehicleRegistration(File(result.path));
     }
   }
 
@@ -215,108 +218,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
       setState(() {
         _messages.insert(0, response);
       });
-    });
-  }
-
-  void _handleDriverLicenseScan() async {
-    try {
-      var licenseKey = Platform.isIOS
-          ? Config.blinkIdLicenseKeyIOS
-          : Config.blinkIdLicenseKeyAndroid;
-
-      // Initialize the BlinkID plugin
-      final blinkIdPlugin = BlinkidFlutter();
-
-      // Set the BlinkID SDK settings
-      final sdkSettings = BlinkIdSdkSettings(licenseKey);
-      sdkSettings.downloadResources = true;
-
-      // Create and modify the Session Settings
-      final sessionSettings = BlinkIdSessionSettings();
-      sessionSettings.scanningMode = ScanningMode.automatic;
-
-      // Create and modify the scanning settings
-      final scanningSettings = BlinkIdScanningSettings();
-      scanningSettings.anonymizationMode = AnonymizationMode.fullResult;
-      scanningSettings.glareDetectionLevel = DetectionLevel.mid;
-      scanningSettings.blurDetectionLevel = DetectionLevel.mid;
-
-      // Create and modify the Image settings
-      final imageSettings = CroppedImageSettings();
-      imageSettings.returnDocumentImage = true;
-      imageSettings.returnSignatureImage = false;
-      imageSettings.returnFaceImage = false;
-
-      // Place the image settings in the scanning settings
-      scanningSettings.croppedImageSettings = imageSettings;
-
-      // Place the Scanning settings in the Session settings
-      sessionSettings.scanningSettings = scanningSettings;
-
-      // Create and modify the UI settings
-      final uiSettings = BlinkIdUiSettings();
-      uiSettings.showHelpButton = true;
-      uiSettings.showOnboardingDialog = false;
-
-      // Call the 'performScan' method and handle the results
-      await blinkIdPlugin
-          .performScan(
-        sdkSettings,
-        sessionSettings,
-        uiSettings,
-      )
-          .then((result) {
-        if (result != null) {
-          _processDriverLicenseResult(result);
-        }
-      }).catchError((scanningError) {
-        if (scanningError is PlatformException) {
-          final errorMessage = scanningError.message;
-          _showErrorMessage('BlinkID scanning error: $errorMessage');
-        }
-      });
-    } catch (e) {
-      _showErrorMessage('Failed to scan driver license: $e');
-    }
-  }
-
-  void _processDriverLicenseResult(BlinkIdScanningResult result) {
-    String extractedInfo = 'Driver License Information:\n\n';
-
-    if (result.firstName?.value?.isNotEmpty == true) {
-      extractedInfo += '• First Name: ${result.firstName!.value}\n';
-    }
-    if (result.lastName?.value?.isNotEmpty == true) {
-      extractedInfo += '• Last Name: ${result.lastName!.value}\n';
-    }
-    if (result.fullName?.value?.isNotEmpty == true) {
-      extractedInfo += '• Full Name: ${result.fullName!.value}\n';
-    }
-    if (result.address?.value?.isNotEmpty == true) {
-      extractedInfo += '• Address: ${result.address!.value}\n';
-    }
-    if (result.documentNumber?.value?.isNotEmpty == true) {
-      extractedInfo += '• License Number: ${result.documentNumber!.value}\n';
-    }
-    if (result.dateOfBirth?.date != null) {
-      final dob = result.dateOfBirth!.date!;
-      extractedInfo += '• Date of Birth: ${dob.day}/${dob.month}/${dob.year}\n';
-    }
-    if (result.dateOfExpiry?.date != null) {
-      final expiry = result.dateOfExpiry!.date!;
-      extractedInfo +=
-          '• Expiry Date: ${expiry.day}/${expiry.month}/${expiry.year}\n';
-    }
-
-    final response = types.TextMessage(
-      author: _assistant,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      text: extractedInfo,
-    );
-
-    setState(() {
-      _messages.insert(0, response);
     });
   }
 
@@ -356,6 +257,25 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to scanner state
+    ref.listen<ScannerState>(documentScannerProvider, (previous, next) {
+      if (next.status == ScannerStatus.success && next.message != null) {
+        // Add success message to chat
+        final response = types.TextMessage(
+          author: _assistant,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          id: const Uuid().v4(),
+          text: next.message!,
+        );
+        setState(() {
+          _messages.insert(0, response);
+        });
+      } else if (next.status == ScannerStatus.error && next.message != null) {
+        // Add error message to chat
+        _showErrorMessage(next.message!);
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('KāPix Citation'),
@@ -369,6 +289,8 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                 _messages.clear();
               });
               _sendWelcomeMessage();
+              ref.read(documentScannerProvider.notifier).reset();
+              ref.read(currentCitationProvider.notifier).reset();
             },
           ),
         ],
@@ -400,10 +322,16 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        height: 60,
-        color: const Color(0xFF1976D2),
-      ),
+      floatingActionButton: _isListening
+          ? FloatingActionButton(
+              onPressed: () {
+                setState(() => _isListening = false);
+                _speechToText.stop();
+              },
+              backgroundColor: Colors.red,
+              child: const Icon(Icons.mic_off),
+            )
+          : null,
     );
   }
 
