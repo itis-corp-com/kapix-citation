@@ -1,18 +1,23 @@
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'dart:io';
+import 'dart:convert';
 
 class OCRService {
   static final _textRecognizer =
       TextRecognizer(script: TextRecognitionScript.latin);
 
-  static Future<Map<String, String?>> processVehicleRegistration(
+  static Future<Map<String, dynamic>> processVehicleRegistration(
       File imageFile) async {
     final inputImage = InputImage.fromFile(imageFile);
     final RecognizedText recognizedText =
         await _textRecognizer.processImage(inputImage);
 
+    // Read image file and convert to base64
+    final imageBytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(imageBytes);
+
     // Extract vehicle registration data
-    Map<String, String?> vehicleData = {
+    Map<String, dynamic> vehicleData = {
       'licensePlate': null,
       'vin': null,
       'year': null,
@@ -21,6 +26,10 @@ class OCRService {
       'color': null,
       'ownerName': null,
       'registrationExpiry': null,
+      
+      // Add image data
+      'documentImage': base64Image,
+      'hasImage': true,
     };
 
     // Common patterns for vehicle data

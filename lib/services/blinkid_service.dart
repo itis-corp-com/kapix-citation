@@ -18,7 +18,7 @@ class BlinkIdService {
 
       // Session Settings
       final sessionSettings = BlinkIdSessionSettings();
-      sessionSettings.scanningMode = ScanningMode.automatic;
+      sessionSettings.scanningMode = ScanningMode.single;
 
       // Scanning Settings
       final scanningSettings = BlinkIdScanningSettings();
@@ -27,11 +27,12 @@ class BlinkIdService {
       scanningSettings.blurDetectionLevel = DetectionLevel.mid;
 
       // Single-side scanning configuration
-      scanningSettings.scanBothSides = false;
-      scanningSettings.returnFullDocumentImage = true;
-      scanningSettings.returnFaceImage = false;
-      scanningSettings.returnSignatureImage = false;
-      scanningSettings.documentDataMatchLevel = MatchLevel.disabled;
+      // Note: These properties may not be available in current BlinkID version
+      // scanningSettings.scanBothSides = false;
+      // scanningSettings.returnFullDocumentImage = true;
+      // scanningSettings.returnFaceImage = false;
+      // scanningSettings.returnSignatureImage = false;
+      // scanningSettings.documentDataMatchLevel = MatchLevel.disabled;
 
       // Image Settings
       final imageSettings = CroppedImageSettings();
@@ -46,7 +47,7 @@ class BlinkIdService {
       final uiSettings = BlinkIdUiSettings();
       uiSettings.showHelpButton = true;
       uiSettings.showOnboardingDialog = false;
-      uiSettings.showSuccessFrame = false;
+      // uiSettings.showSuccessFrame = false; // May not be available in current version
 
       // Perform scan
       final result = await _blinkIdPlugin.performScan(
@@ -65,9 +66,9 @@ class BlinkIdService {
   }
 
   Map<String, dynamic> extractDriverData(BlinkIdScanningResult result) {
-    return {
+    final data = {
       'firstName': result.firstName?.value,
-      'middleName': result.middleName?.value,
+      // 'middleName': result.middleName?.value, // May not be available
       'lastName': result.lastName?.value,
       'fullName': result.fullName?.value,
       'dlNumber': result.documentNumber?.value,
@@ -75,25 +76,34 @@ class BlinkIdService {
       'address': result.address?.value,
       'dateOfBirth': result.dateOfBirth?.date != null
           ? DateTime(
-              result.dateOfBirth!.date!.year,
-              result.dateOfBirth!.date!.month,
-              result.dateOfBirth!.date!.day,
+              result.dateOfBirth!.date!.year!,
+              result.dateOfBirth!.date!.month!,
+              result.dateOfBirth!.date!.day!,
             )
           : null,
       'expiryDate': result.dateOfExpiry?.date != null
           ? DateTime(
-              result.dateOfExpiry!.date!.year,
-              result.dateOfExpiry!.date!.month,
-              result.dateOfExpiry!.date!.day,
+              result.dateOfExpiry!.date!.year!,
+              result.dateOfExpiry!.date!.month!,
+              result.dateOfExpiry!.date!.day!,
             )
           : null,
       'sex': result.sex?.value,
-      'height': result.height?.value,
-      'weight': result.weight?.value,
-      'eyeColor': result.eyeColor?.value,
-      'hairColor': result.hairColor?.value,
-      'documentType': result.documentType?.name,
+      // 'height': result.height?.value, // May not be available
+      // 'weight': result.weight?.value, // May not be available
+      // 'eyeColor': result.eyeColor?.value, // May not be available
+      // 'hairColor': result.hairColor?.value, // May not be available
+      // 'documentType': result.documentType?.name, // May not be available
+      
+      // Add image data
+      'documentImage': result.firstDocumentImage ?? result.firstInputImage,
+      'hasImage': (result.firstDocumentImage ?? result.firstInputImage) != null,
     };
+    
+    // Debug logging to see what data was extracted
+    print('BlinkID extracted data: ${data.keys.toList()}');
+    print('Has image: ${data['hasImage']}');
+    return data;
   }
 
   String formatDriverLicenseInfo(Map<String, dynamic> data) {

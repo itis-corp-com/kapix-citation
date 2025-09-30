@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../services/blinkid_service.dart';
 import '../services/ocr_service.dart';
+import 'citation_provider.dart';
 import 'dart:io';
 
 part 'document_scanner_provider.g.dart';
@@ -114,7 +116,7 @@ class DocumentScanner extends _$DocumentScanner {
     }
   }
 
-  String _formatVehicleInfo(Map<String, String?> data) {
+  String _formatVehicleInfo(Map<String, dynamic> data) {
     final buffer = StringBuffer('Vehicle Registration Information:\n\n');
 
     if (data['licensePlate'] != null) {
