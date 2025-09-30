@@ -20,6 +20,29 @@ class CitationChatScreen extends ConsumerStatefulWidget {
   ConsumerState<CitationChatScreen> createState() => _CitationChatScreenState();
 }
 
+// Enum for document types
+enum DocumentType {
+  driverLicense,
+  vehicleRegistration,
+  insuranceCard,
+  photo,
+}
+
+// Model for scanned document
+class ScannedDocument {
+  final DocumentType type;
+  final String? imagePath;
+  final Map<String, dynamic>? data;
+  final DateTime timestamp;
+
+  ScannedDocument({
+    required this.type,
+    this.imagePath,
+    this.data,
+    required this.timestamp,
+  });
+}
+
 class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
   final List<types.Message> _messages = [];
   late final types.User _assistant;
@@ -27,7 +50,7 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
   final _speechToText = SpeechToText();
   final _textController = TextEditingController();
   bool _isListening = false;
-  bool _showAttachmentMenu = false;
+  final List<ScannedDocument> _scannedDocuments = [];
 
   @override
   void initState() {
@@ -53,7 +76,8 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
     try {
       final bytes = base64Decode(base64String);
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/scanned_document_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file = File(
+          '${tempDir.path}/scanned_document_${DateTime.now().millisecondsSinceEpoch}.jpg');
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (e) {
@@ -93,7 +117,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
       _messages.insert(0, textMessage);
     });
 
-    // TODO: Process the message with AI
     _processMessage(message.text);
   }
 
@@ -131,17 +154,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                 ),
               ),
               TextButton.icon(
-                icon: const Icon(Icons.upload_file),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _uploadFile();
-                },
-                label: const Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text('Upload File'),
-                ),
-              ),
-              TextButton.icon(
                 icon: const Icon(Icons.directions_car),
                 onPressed: () {
                   Navigator.pop(context);
@@ -164,17 +176,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                 ),
               ),
               TextButton.icon(
-                icon: const Icon(Icons.mic),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _handleVoiceInput();
-                },
-                label: const Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text('Voice Input'),
-                ),
-              ),
-              TextButton.icon(
                 icon: const Icon(Icons.picture_as_pdf),
                 onPressed: () {
                   Navigator.pop(context);
@@ -183,17 +184,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                 label: const Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Text('Generate Citation PDF'),
-                ),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.analytics),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _handleFormAnalysis();
-                },
-                label: const Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text('Analyze PDF Form (Debug)'),
                 ),
               ),
               TextButton(
@@ -247,7 +237,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
         _messages.insert(0, imageMessage);
       });
 
-      // Process image with OCR
       _processImage(File(result.path));
     }
   }
@@ -263,18 +252,17 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
     );
     setState(() {
       _messages.insert(0, imageMessage);
+      // Add to scanned documents as a photo
+      _scannedDocuments.add(ScannedDocument(
+        type: DocumentType.photo,
+        imagePath: imagePath,
+        timestamp: DateTime.now(),
+      ));
     });
   }
 
   void _takePicture() async {
     final result = await ImagePicker().pickImage(source: ImageSource.camera);
-    if (result != null) {
-      _addImageMessage(result.path);
-    }
-  }
-
-  void _uploadFile() async {
-    final result = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (result != null) {
       _addImageMessage(result.path);
     }
@@ -295,7 +283,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
   }
 
   void _processImage(File image) {
-    // Simulate OCR processing
     Future.delayed(const Duration(seconds: 2), () {
       final response = types.TextMessage(
         author: _assistant,
@@ -348,18 +335,250 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
   }
 
   void _handlePDFGeneration() {
-    // Generate the citation PDF
     ref.read(pDFGeneratorProvider.notifier).generateCitationPDF();
   }
 
   void _handleFormAnalysis() {
-    // Analyze the PDF form structure for debugging
     ref.read(pDFGeneratorProvider.notifier).analyzeFormStructure();
+  }
+
+  // Show document viewer dialog
+  void _showDocumentViewer(ScannedDocument doc) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1976D2),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _getDocumentIcon(doc.type),
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _getDocumentTitle(doc.type),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // Image
+              if (doc.imagePath != null)
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(doc.imagePath!),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              // Data (if available)
+              if (doc.data != null && doc.data!.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Extracted Information:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...doc.data!.entries
+                          .where((e) =>
+                              e.value != null &&
+                              e.key != 'documentImage' &&
+                              e.key != 'hasImage')
+                          .map((e) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  '${_formatKey(e.key)}: ${e.value}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              )),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatKey(String key) {
+    // Convert camelCase to Title Case
+    return key
+        .replaceAllMapped(RegExp(r'([A-Z])'), (match) => ' ${match.group(0)}')
+        .trim()
+        .split(' ')
+        .map((word) => word[0].toUpperCase() + word.substring(1))
+        .join(' ');
+  }
+
+  IconData _getDocumentIcon(DocumentType type) {
+    switch (type) {
+      case DocumentType.driverLicense:
+        return Icons.badge;
+      case DocumentType.vehicleRegistration:
+        return Icons.directions_car;
+      case DocumentType.insuranceCard:
+        return Icons.health_and_safety;
+      case DocumentType.photo:
+        return Icons.photo;
+    }
+  }
+
+  String _getDocumentTitle(DocumentType type) {
+    switch (type) {
+      case DocumentType.driverLicense:
+        return 'Driver License';
+      case DocumentType.vehicleRegistration:
+        return 'Vehicle Registration';
+      case DocumentType.insuranceCard:
+        return 'Insurance Card';
+      case DocumentType.photo:
+        return 'Photo';
+    }
+  }
+
+  Color _getDocumentColor(DocumentType type) {
+    switch (type) {
+      case DocumentType.driverLicense:
+        return Colors.blue.shade700;
+      case DocumentType.vehicleRegistration:
+        return Colors.green.shade700;
+      case DocumentType.insuranceCard:
+        return Colors.orange.shade700;
+      case DocumentType.photo:
+        return Colors.purple.shade700;
+    }
+  }
+
+  // Build document tracker bar
+  Widget _buildDocumentTrackerBar() {
+    if (_scannedDocuments.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.article,
+            size: 20,
+            color: Colors.grey.shade600,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Documents:',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _scannedDocuments.map((doc) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: InkWell(
+                      onTap: () => _showDocumentViewer(doc),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _getDocumentColor(doc.type).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _getDocumentColor(doc.type).withOpacity(0.3),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getDocumentIcon(doc.type),
+                              size: 20,
+                              color: _getDocumentColor(doc.type),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _getDocumentTitle(doc.type),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: _getDocumentColor(doc.type),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCustomInputArea() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(
@@ -369,25 +588,41 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
       child: SafeArea(
         child: Row(
           children: [
-            // Microphone button
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                onPressed: _handleVoiceInput,
-                icon: Icon(
-                  _isListening ? Icons.mic : Icons.mic_none,
-                  color: _isListening ? Colors.red : Colors.grey.shade600,
-                  size: 24,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.grey.shade100,
-                  shape: const CircleBorder(),
-                  padding: const EdgeInsets.all(12),
-                ),
+            // Paperclip/Attachment button
+            IconButton(
+              onPressed: _handleAttachmentPressed,
+              icon: Icon(
+                Icons.attach_file,
+                color: Colors.grey.shade700,
+                size: 24,
+              ),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(10),
               ),
             ),
-            
-            // Input field with attachment dropdown
+
+            const SizedBox(width: 4),
+
+            // Camera button
+            IconButton(
+              onPressed: _takePicture,
+              icon: Icon(
+                Icons.camera_alt,
+                color: Colors.grey.shade700,
+                size: 22,
+              ),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(10),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // Text input field
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -397,90 +632,11 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                 ),
                 child: Row(
                   children: [
-                    // Attachment dropdown button
-                    PopupMenuButton<String>(
-                      onSelected: _handleAttachmentSelection,
-                      offset: const Offset(0, -200),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add, color: Colors.grey.shade600, size: 20),
-                            const SizedBox(width: 4),
-                            Icon(Icons.apps, color: Colors.grey.shade600, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Tools',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'scan_license',
-                          child: Row(
-                            children: [
-                              Icon(Icons.badge, size: 20),
-                              SizedBox(width: 12),
-                              Text('Scan Driver License'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'scan_registration',
-                          child: Row(
-                            children: [
-                              Icon(Icons.directions_car, size: 20),
-                              SizedBox(width: 12),
-                              Text('Scan Vehicle Registration'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'photo_gallery',
-                          child: Row(
-                            children: [
-                              Icon(Icons.photo, size: 20),
-                              SizedBox(width: 12),
-                              Text('Photo Gallery'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'generate_pdf',
-                          child: Row(
-                            children: [
-                              Icon(Icons.picture_as_pdf, size: 20),
-                              SizedBox(width: 12),
-                              Text('Generate Citation PDF'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'analyze_form',
-                          child: Row(
-                            children: [
-                              Icon(Icons.analytics, size: 20),
-                              SizedBox(width: 12),
-                              Text('Analyze PDF Form (Debug)'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    // Text input field
                     Expanded(
                       child: TextField(
                         controller: _textController,
                         decoration: const InputDecoration(
-                          hintText: 'Ask anything',
+                          hintText: 'Message',
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 16,
@@ -490,33 +646,48 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
                         style: const TextStyle(fontSize: 16),
                         onSubmitted: (text) {
                           if (text.trim().isNotEmpty) {
-                            _handleSendPressed(types.PartialText(text: text.trim()));
+                            _handleSendPressed(
+                                types.PartialText(text: text.trim()));
                             _textController.clear();
                           }
                         },
                       ),
                     ),
-                    
-                    // Send button
-                    Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      child: IconButton(
-                        onPressed: () {
-                          final text = _textController.text.trim();
-                          if (text.isNotEmpty) {
-                            _handleSendPressed(types.PartialText(text: text));
-                            _textController.clear();
-                          }
-                        },
-                        icon: Icon(
-                          Icons.send,
-                          color: Colors.grey.shade600,
-                          size: 20,
-                        ),
+
+                    // Microphone button
+                    IconButton(
+                      onPressed: _handleVoiceInput,
+                      icon: Icon(
+                        _isListening ? Icons.mic : Icons.mic_none,
+                        color: _isListening ? Colors.red : Colors.grey.shade600,
+                        size: 22,
                       ),
                     ),
                   ],
                 ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            // Send button
+            IconButton(
+              onPressed: () {
+                final text = _textController.text.trim();
+                if (text.isNotEmpty) {
+                  _handleSendPressed(types.PartialText(text: text));
+                  _textController.clear();
+                }
+              },
+              icon: Icon(
+                Icons.send,
+                color: Colors.blue.shade600,
+                size: 24,
+              ),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.blue.shade50,
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(10),
               ),
             ),
           ],
@@ -525,44 +696,29 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
     );
   }
 
-  void _handleAttachmentSelection(String value) {
-    switch (value) {
-      case 'scan_license':
-        ref.read(documentScannerProvider.notifier).scanDriverLicense();
-        break;
-      case 'scan_registration':
-        _handleVehicleRegistrationScan();
-        break;
-      case 'photo_gallery':
-        _handleImageSelection();
-        break;
-      case 'generate_pdf':
-        _handlePDFGeneration();
-        break;
-      case 'analyze_form':
-        _handleFormAnalysis();
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // Listen to scanner state
     ref.listen<ScannerState>(documentScannerProvider, (previous, next) async {
       if (next.status == ScannerStatus.success && next.message != null) {
-        // Add image message if available
-        if (next.data != null && next.data!['hasImage'] == true && next.data!['documentImage'] != null) {
-          // Determine document type based on data content
+        if (next.data != null &&
+            next.data!['hasImage'] == true &&
+            next.data!['documentImage'] != null) {
           String documentName = 'Document';
+          DocumentType docType = DocumentType.photo;
+
           if (next.data!['dlNumber'] != null) {
             documentName = 'Driver License';
-          } else if (next.data!['licensePlate'] != null || next.data!['vin'] != null) {
+            docType = DocumentType.driverLicense;
+          } else if (next.data!['licensePlate'] != null ||
+              next.data!['vin'] != null) {
             documentName = 'Vehicle Registration';
+            docType = DocumentType.vehicleRegistration;
           }
-          
-          // Save base64 image to temporary file
-          final imagePath = await _saveBase64ImageToFile(next.data!['documentImage']);
-          
+
+          final imagePath =
+              await _saveBase64ImageToFile(next.data!['documentImage']);
+
           if (imagePath != null) {
             final imageMessage = types.ImageMessage(
               author: _assistant,
@@ -574,11 +730,17 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
             );
             setState(() {
               _messages.insert(0, imageMessage);
+              // Add to scanned documents
+              _scannedDocuments.add(ScannedDocument(
+                type: docType,
+                imagePath: imagePath,
+                data: next.data,
+                timestamp: DateTime.now(),
+              ));
             });
           }
         }
-        
-        // Add success message to chat
+
         final response = types.TextMessage(
           author: _assistant,
           createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -589,7 +751,6 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
           _messages.insert(0, response);
         });
       } else if (next.status == ScannerStatus.error && next.message != null) {
-        // Add error message to chat
         _showErrorMessage(next.message!);
       }
     });
@@ -597,18 +758,17 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
     // Listen to PDF generation state
     ref.listen<PDFState>(pDFGeneratorProvider, (previous, next) {
       if (next.status == PDFStatus.success && next.generatedPDF != null) {
-        // Add success message with PDF file
         final response = types.TextMessage(
           author: _assistant,
           createdAt: DateTime.now().millisecondsSinceEpoch,
           id: const Uuid().v4(),
-          text: '📄 Citation PDF generated successfully!\nFile saved to: ${next.generatedPDF!.path}',
+          text:
+              '📄 Citation PDF generated successfully!\nFile saved to: ${next.generatedPDF!.path}',
         );
         setState(() {
           _messages.insert(0, response);
         });
       } else if (next.status == PDFStatus.success && next.formFields != null) {
-        // Add form analysis results
         final fieldsList = next.formFields!.entries
             .map((e) => '• ${e.key}: ${e.value}')
             .join('\n');
@@ -616,7 +776,8 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
           author: _assistant,
           createdAt: DateTime.now().millisecondsSinceEpoch,
           id: const Uuid().v4(),
-          text: '📋 PDF Form Analysis Results:\n\n$fieldsList\n\nTotal fields: ${next.formFields!.length}',
+          text:
+              '📋 PDF Form Analysis Results:\n\n$fieldsList\n\nTotal fields: ${next.formFields!.length}',
         );
         setState(() {
           _messages.insert(0, response);
@@ -647,6 +808,7 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
             onPressed: () {
               setState(() {
                 _messages.clear();
+                _scannedDocuments.clear();
               });
               _sendWelcomeMessage();
               ref.read(documentScannerProvider.notifier).reset();
@@ -655,49 +817,41 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
           ),
         ],
       ),
-      body: Chat(
-        messages: _messages,
-        onSendPressed: _handleSendPressed,
-        user: _officer,
-        onAttachmentPressed: _handleAttachmentPressed,
-        showUserAvatars: false,
-        showUserNames: false,
-        theme: const DefaultChatTheme(
-          backgroundColor: Colors.white,
-          primaryColor: const Color(0xFF2196F3),
-          secondaryColor: const Color(0xFFF5F5F5),
-          inputBackgroundColor: const Color(0xFFF5F5F5),
-          messageBorderRadius: 12,
-          messageInsetsHorizontal: 16,
-          messageInsetsVertical: 12,
-          inputTextColor: Colors.black,
-          attachmentButtonIcon:
-              const Icon(Icons.attach_file, color: Colors.black54),
-          sendButtonIcon: const Icon(Icons.send, color: Colors.black54),
-          inputTextStyle: const TextStyle(
-            fontFamily: 'SF Pro Display',
-            fontSize: 16,
-            color: Colors.black,
-            fontWeight: FontWeight.w400,
+      body: Column(
+        children: [
+          // Document tracker bar
+          _buildDocumentTrackerBar(),
+
+          // Chat area
+          Expanded(
+            child: Chat(
+              messages: _messages,
+              onSendPressed: _handleSendPressed,
+              user: _officer,
+              showUserAvatars: false,
+              showUserNames: false,
+              theme: DefaultChatTheme(
+                backgroundColor: Colors.white,
+                primaryColor: const Color(0xFF2196F3),
+                secondaryColor: const Color(0xFFF5F5F5),
+                inputBackgroundColor: const Color(0xFFF5F5F5),
+                messageBorderRadius: 12,
+                messageInsetsHorizontal: 16,
+                messageInsetsVertical: 12,
+                inputTextColor: Colors.black,
+              ),
+              customBottomWidget: _buildCustomInputArea(),
+            ),
           ),
-        ),
+        ],
       ),
-      floatingActionButton: _isListening
-          ? FloatingActionButton(
-              onPressed: () {
-                setState(() => _isListening = false);
-                _speechToText.stop();
-              },
-              backgroundColor: Colors.red,
-              child: const Icon(Icons.mic_off),
-            )
-          : null,
     );
   }
 
   @override
   void dispose() {
     _speechToText.cancel();
+    _textController.dispose();
     super.dispose();
   }
 }
