@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,7 @@ import '../providers/citation_provider.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/progress_provider.dart';
 import '../widgets/citation_progress.dart';
+import '../auth/auth_provider.dart';
 
 class CitationChatScreen extends ConsumerStatefulWidget {
   const CitationChatScreen({super.key});
@@ -871,6 +873,12 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
               _sendWelcomeMessage();
               ref.read(documentScannerProvider.notifier).reset();
               ref.read(currentCitationProvider.notifier).reset();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              provider.Provider.of<AuthProvider>(context, listen: false).logout();
             },
           ),
         ],
