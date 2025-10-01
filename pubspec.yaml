@@ -37,9 +37,12 @@ dependencies:
   
   # Utilities
   uuid: ^4.2.1
-  intl: ^0.20.2
+  intl: ^0.18.1
   path_provider: ^2.1.1
   path: ^1.8.3
+  
+  # Finite state machine
+  state_machine: ^3.0.1
 
 dev_dependencies:
   flutter_test:

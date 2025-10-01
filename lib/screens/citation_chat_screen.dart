@@ -12,6 +12,8 @@ import 'dart:convert';
 import '../providers/document_scanner_provider.dart';
 import '../providers/citation_provider.dart';
 import '../providers/pdf_provider.dart';
+import '../providers/progress_provider.dart';
+import '../widgets/citation_progress.dart';
 
 class CitationChatScreen extends ConsumerStatefulWidget {
   const CitationChatScreen({super.key});
@@ -92,13 +94,14 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
       createdAt: DateTime.now().millisecondsSinceEpoch,
       id: const Uuid().v4(),
       text:
-          'Hello Officer! I\'m here to help you complete a citation. You can:\n'
-          '• Scan driver\'s license with BlinkID\n'
-          '• Scan vehicle registration documents\n'
-          '• Use voice to describe the violation\n'
-          '• Type any details\n'
-          '• Generate a completed citation PDF\n\n'
-          'Let\'s start by scanning the driver\'s license or vehicle registration.',
+          'Hello Officer! I\'m here to help you complete a citation.\n\n'
+          'MOCK MODE: Take any photo to advance through the citation steps:\n'
+          '1. Driver License\n'
+          '2. Vehicle Registration\n'
+          '3. Insurance Card\n'
+          '4. Contact Info\n'
+          '5. Review & Submit\n\n'
+          'Tap the attachment button and take a picture to start!',
     );
     setState(() {
       _messages.insert(0, welcomeMessage);
@@ -258,6 +261,61 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
         imagePath: imagePath,
         timestamp: DateTime.now(),
       ));
+    });
+    
+    // Mock: Advance the citation flow
+    _advanceMockFlow();
+  }
+
+  void _advanceMockFlow() {
+    final currentState = ref.read(progressProvider);
+    String nextState;
+    String mockResponse;
+    
+    switch (currentState) {
+      case 'start':
+        nextState = 'licenseFront';
+        mockResponse = 'Great! I can see the driver\'s license. Extracting information...';
+        break;
+      case 'licenseFront':
+        nextState = 'registration';
+        mockResponse = 'License processed! Now let\'s scan the vehicle registration.';
+        break;
+      case 'registration':
+        nextState = 'insurance';
+        mockResponse = 'Registration captured! Please scan the insurance card.';
+        break;
+      case 'insurance':
+        nextState = 'contact';
+        mockResponse = 'Insurance verified! Please provide contact information.';
+        break;
+      case 'contact':
+        nextState = 'review';
+        mockResponse = 'Contact saved! Ready to review the citation details.';
+        break;
+      case 'review':
+        nextState = 'done';
+        mockResponse = 'Citation completed! PDF has been generated.';
+        break;
+      default:
+        nextState = currentState;
+        mockResponse = 'Processing...';
+    }
+    
+    // Update progress
+    ref.read(progressProvider.notifier).updateState(nextState);
+    
+    // Add assistant response
+    Future.delayed(const Duration(milliseconds: 500), () {
+      final response = types.TextMessage(
+        author: _assistant,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        text: mockResponse,
+      );
+      setState(() {
+        _messages.insert(0, response);
+      });
     });
   }
 
@@ -821,6 +879,14 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
         children: [
           // Document tracker bar
           _buildDocumentTrackerBar(),
+          
+          // Progress indicator
+          Consumer(
+            builder: (context, ref, child) {
+              final currentState = ref.watch(progressProvider);
+              return CitationProgress(currentState: currentState);
+            },
+          ),
 
           // Chat area
           Expanded(

@@ -1,20 +1,18 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../services/blinkid_service.dart';
-import '../services/ocr_service.dart';
-import 'citation_provider.dart';
+import 'dart:async';
 import 'dart:io';
 
-part 'document_scanner_provider.g.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Provider for BlinkID service
-@riverpod
-BlinkIdService blinkIdService(BlinkIdServiceRef ref) {
-  return BlinkIdService();
-}
+/// The scanning workflow may involve multiple asynchronous steps such as
+/// launching a camera interface, processing images with an OCR service
+/// and returning structured data. To keep the UI responsive we model
+/// the scanner as a state notifier with a simple status enum and
+/// optional message and data payload. This provider acts as a
+/// placeholder for the full Microblink/MLKit integration; in this
+/// example it emits dummy data to demonstrate the integration with
+/// the citation state machine.
 
-// Scanner state
 enum ScannerStatus { idle, scanning, processing, success, error }
 
 @immutable
@@ -42,106 +40,70 @@ class ScannerState {
   }
 }
 
-// Document scanner provider
-@riverpod
-class DocumentScanner extends _$DocumentScanner {
-  @override
-  ScannerState build() => const ScannerState();
+/// A state notifier that simulates scanning documents. In a real
+/// application these methods would invoke Microblink for driver
+/// licenses and registration documents, perform OCR on captured
+/// images, and return structured fields. Here we emit fixed data
+/// after a short delay to demonstrate integration with the UI.
+class DocumentScanner extends StateNotifier<ScannerState> {
+  DocumentScanner() : super(const ScannerState());
 
+  /// Simulate scanning a driver's license. Emits a [ScannerState]
+  /// with dummy driver data after a delay. In your implementation
+  /// replace this with a call to the Microblink SDK and update the
+  /// citation providers accordingly.
   Future<void> scanDriverLicense() async {
     state = state.copyWith(
       status: ScannerStatus.scanning,
-      message: 'Opening scanner...',
+      message: 'Scanning driver license...',
     );
-
-    try {
-      final blinkIdService = ref.read(blinkIdServiceProvider);
-      final result = await blinkIdService.scanDriverLicense();
-
-      if (result != null) {
-        state = state.copyWith(
-          status: ScannerStatus.processing,
-          message: 'Processing license data...',
-        );
-
-        final extractedData = blinkIdService.extractDriverData(result);
-
-        // Update citation with driver data
-        ref.read(currentCitationProvider.notifier).updateDriver(extractedData);
-
-        state = state.copyWith(
-          status: ScannerStatus.success,
-          message: blinkIdService.formatDriverLicenseInfo(extractedData),
-          data: extractedData,
-        );
-      } else {
-        state = state.copyWith(
-          status: ScannerStatus.idle,
-          message: 'Scan cancelled',
-        );
-      }
-    } catch (e) {
-      state = state.copyWith(
-        status: ScannerStatus.error,
-        message: 'Error: ${e.toString()}',
-      );
-    }
+    await Future.delayed(const Duration(seconds: 1));
+    // Dummy driver data extracted from license
+    final data = {
+      'firstName': 'Jane',
+      'lastName': 'Doe',
+      'dateOfBirth': '01/15/1985',
+      'dlNumber': 'D9876543',
+      'dlState': 'CA',
+    };
+    state = state.copyWith(
+      status: ScannerStatus.success,
+      message: 'Driver license scanned.',
+      data: data,
+    );
   }
 
+  /// Simulate scanning a vehicle registration from a captured image
+  /// file. Replace this stub with OCR and extraction logic for
+  /// registration documents. The [imageFile] parameter represents
+  /// the photo taken by the officer.
   Future<void> scanVehicleRegistration(File imageFile) async {
     state = state.copyWith(
       status: ScannerStatus.processing,
       message: 'Scanning vehicle registration...',
     );
-
-    try {
-      final vehicleData =
-          await OCRService.processVehicleRegistration(imageFile);
-
-      // Update citation with vehicle data
-      ref.read(currentCitationProvider.notifier).updateVehicle(vehicleData);
-
-      final formattedInfo = _formatVehicleInfo(vehicleData);
-
-      state = state.copyWith(
-        status: ScannerStatus.success,
-        message: formattedInfo,
-        data: vehicleData,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        status: ScannerStatus.error,
-        message: 'Error processing registration: ${e.toString()}',
-      );
-    }
+    await Future.delayed(const Duration(seconds: 1));
+    final data = {
+      'licensePlate': '7ABC123',
+      'plateState': 'CA',
+      'vin': '1HGCM82633A004352',
+    };
+    state = state.copyWith(
+      status: ScannerStatus.success,
+      message: 'Vehicle registration scanned.',
+      data: data,
+    );
   }
 
-  String _formatVehicleInfo(Map<String, dynamic> data) {
-    final buffer = StringBuffer('Vehicle Registration Information:\n\n');
-
-    if (data['licensePlate'] != null) {
-      buffer.writeln('• License Plate: ${data['licensePlate']}');
-    }
-    if (data['vin'] != null) {
-      buffer.writeln('• VIN: ${data['vin']}');
-    }
-    if (data['year'] != null) {
-      buffer.writeln('• Year: ${data['year']}');
-    }
-    if (data['make'] != null) {
-      buffer.writeln('• Make: ${data['make']}');
-    }
-    if (data['model'] != null) {
-      buffer.writeln('• Model: ${data['model']}');
-    }
-    if (data['color'] != null) {
-      buffer.writeln('• Color: ${data['color']}');
-    }
-
-    return buffer.toString();
-  }
-
+  /// Reset the scanner to the idle state. Useful when starting a new
+  /// citation or when the scan is cancelled.
   void reset() {
     state = const ScannerState();
   }
 }
+
+/// The Riverpod provider for the document scanner. Access the
+/// notifier to initiate scans and listen to the state for updates.
+final documentScannerProvider = StateNotifierProvider<DocumentScanner, ScannerState>((ref) {
+  return DocumentScanner();
+});

@@ -1,11 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'dart:io';
-import '../services/pdf_service.dart';
-import 'citation_provider.dart';
+import 'package:path_provider/path_provider.dart';
 
-part 'pdf_provider.g.dart';
+/// A simple PDF generator state machine. In the production app
+/// this provider would use a PDF service to populate a citation
+/// form. Here we simulate generation by writing a small text file
+/// to the device's temporary directory and reporting its path.
 
 enum PDFStatus { idle, generating, success, error }
 
@@ -38,73 +41,28 @@ class PDFState {
   }
 }
 
-@riverpod
-class PDFGenerator extends _$PDFGenerator {
-  @override
-  PDFState build() => const PDFState();
+class PDFGenerator extends StateNotifier<PDFState> {
+  PDFGenerator() : super(const PDFState());
 
-  /// Generate a citation PDF from the current citation data
+  /// Simulate generating a citation PDF. Writes a small file with
+  /// placeholder content and updates the state. In a real
+  /// implementation this would call a PDF service or plugin.
   Future<void> generateCitationPDF() async {
     state = state.copyWith(
       status: PDFStatus.generating,
-      message: 'Generating citation PDF...',
+      message: 'Generating citation PDF...'
     );
-
     try {
-      // Get the current citation data
-      final citation = ref.read(currentCitationProvider);
-      
-      // Convert citation to map for PDF service
-      final Map<String, dynamic> citationData = {
-        // Driver information
-        'firstName': citation.firstName,
-        'lastName': citation.lastName,
-        'fullName': '${citation.firstName ?? ''} ${citation.lastName ?? ''}'.trim(),
-        'dlNumber': citation.dlNumber,
-        'dlState': citation.dlState,
-        'address': citation.address,
-        'city': citation.city,
-        'state': citation.state,
-        'zip': citation.zip,
-        'dateOfBirth': citation.dateOfBirth,
-        
-        // Vehicle information
-        'vehicleLicense': citation.vehicleLicense,
-        'vehicleState': citation.vehicleState,
-        'vin': citation.vin,
-        'vehicleYear': citation.vehicleYear,
-        'vehicleMake': citation.vehicleMake,
-        'vehicleModel': citation.vehicleModel,
-        'vehicleColor': citation.vehicleColor,
-        
-        // Violation information
-        'violationCode': citation.violationCode,
-        'violationDescription': citation.violationDescription,
-        'location': citation.location,
-        'speed': citation.speed,
-        'speedLimit': citation.speedLimit,
-        
-        // Officer information (you might want to add these to your citation model)
-        'officerName': 'Officer Smith', // TODO: Get from user preferences
-        'officerBadge': '12345', // TODO: Get from user preferences
-        'department': 'California Highway Patrol', // TODO: Get from configuration
-      };
-
-      // Generate the PDF
-      final File? pdfFile = await PDFService.populateCitationForm(citationData);
-
-      if (pdfFile != null) {
-        state = state.copyWith(
-          status: PDFStatus.success,
-          message: 'Citation PDF generated successfully',
-          generatedPDF: pdfFile,
-        );
-      } else {
-        state = state.copyWith(
-          status: PDFStatus.error,
-          message: 'Failed to generate PDF',
-        );
-      }
+      // Write a dummy text file to represent a PDF
+      final dir = await getTemporaryDirectory();
+      final filePath = '${dir.path}/citation_${DateTime.now().millisecondsSinceEpoch}.txt';
+      final file = File(filePath);
+      await file.writeAsString('This is a placeholder for a generated citation PDF.');
+      state = state.copyWith(
+        status: PDFStatus.success,
+        message: 'PDF generated successfully!',
+        generatedPDF: file,
+      );
     } catch (e) {
       state = state.copyWith(
         status: PDFStatus.error,
@@ -113,19 +71,16 @@ class PDFGenerator extends _$PDFGenerator {
     }
   }
 
-  /// Analyze the PDF form structure for debugging
   Future<void> analyzeFormStructure() async {
     state = state.copyWith(
       status: PDFStatus.generating,
-      message: 'Analyzing PDF form structure...',
+      message: 'Analyzing form structure...'
     );
-
     try {
-      final Map<String, String> formFields = await PDFService.analyzeFormStructure();
-      
+      final formFields = {'field1': 'value1', 'field2': 'value2'};
       state = state.copyWith(
         status: PDFStatus.success,
-        message: 'Form structure analyzed successfully',
+        message: 'Form analysis complete!',
         formFields: formFields,
       );
     } catch (e) {
@@ -136,8 +91,13 @@ class PDFGenerator extends _$PDFGenerator {
     }
   }
 
-  /// Reset the PDF generator state
   void reset() {
     state = const PDFState();
   }
 }
+
+/// Riverpod provider for the PDF generator. Use the notifier to
+/// trigger PDF creation and listen to the state for status updates.
+final pDFGeneratorProvider = StateNotifierProvider<PDFGenerator, PDFState>((ref) {
+  return PDFGenerator();
+});
