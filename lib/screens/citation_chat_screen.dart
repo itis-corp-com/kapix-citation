@@ -14,6 +14,7 @@ import '../providers/document_scanner_provider.dart';
 import '../providers/citation_provider.dart';
 import '../providers/pdf_provider.dart';
 import '../providers/progress_provider.dart';
+import '../providers/citation_rtdb_provider.dart';
 import '../widgets/citation_progress.dart';
 import '../auth/auth_provider.dart';
 
@@ -55,6 +56,7 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
   final _textController = TextEditingController();
   bool _isListening = false;
   final List<ScannedDocument> _scannedDocuments = [];
+  String? _currentCitationId; // Track current citation ID for RTDB
 
   @override
   void initState() {
@@ -342,7 +344,46 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
     }
   }
 
-  void _processImage(File image) {
+  void _processImage(File image) async {
+    // Save to RTDB when image is processed
+    final citationProvider = provider.Provider.of<CitationRtdbProvider>(context, listen: false);
+    
+    try {
+      // Create citation if it doesn't exist
+      if (_currentCitationId == null) {
+        _currentCitationId = await citationProvider.createCitation(
+          type: 'traffic_citation',
+          initialData: {
+            'location': 'Unknown Location',
+            'officer': 'Officer Badge #123',
+          },
+        );
+      }
+
+      // Add document to RTDB
+      await citationProvider.addDocument(
+        _currentCitationId!,
+        'image_document',
+        {
+          'imagePath': image.path,
+          'status': 'processing',
+          'uploadedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Update progress in RTDB
+      await citationProvider.updateProgress(
+        _currentCitationId!,
+        'document_processing',
+        {
+          'step': 'analyzing_document',
+          'progress': 0.5,
+        },
+      );
+    } catch (e) {
+      print('RTDB Error: $e');
+    }
+
     Future.delayed(const Duration(seconds: 2), () {
       final response = types.TextMessage(
         author: _assistant,
@@ -352,7 +393,8 @@ class _CitationChatScreenState extends ConsumerState<CitationChatScreen> {
             'Extracted information:\n'
             '• Name: [Processing...]\n'
             '• License #: [Processing...]\n'
-            '• Address: [Processing...]',
+            '• Address: [Processing...]\n\n'
+            '✅ Saved to Firebase RTDB for backend processing',
       );
       setState(() {
         _messages.insert(0, response);

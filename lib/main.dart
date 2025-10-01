@@ -6,12 +6,18 @@ import 'firebase_options.dart';
 import 'screens/citation_chat_screen.dart';
 import 'auth/auth_provider.dart';
 import 'auth/auth_screen.dart';
+import 'services/firebase_service.dart';
+import 'providers/citation_rtdb_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Initialize Firebase RTDB with offline persistence
+  await FirebaseService.initialize();
   
   runApp(
     const ProviderScope(
@@ -28,6 +34,13 @@ class KapixCitationApp extends StatelessWidget {
     return provider.MultiProvider(
       providers: [
         provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
+        provider.ChangeNotifierProxyProvider<AuthProvider, CitationRtdbProvider>(
+          create: (_) => CitationRtdbProvider('', ''),
+          update: (ctx, auth, previousProvider) => CitationRtdbProvider(
+            auth.userId ?? '',
+            auth.token ?? '',
+          ),
+        ),
       ],
       child: MaterialApp(
         title: 'KāPix Citation',
